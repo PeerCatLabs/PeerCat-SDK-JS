@@ -61,7 +61,7 @@ export type {
   ApiErrorResponse,
 } from './types';
 
-// Error classes
+// Error classes and types
 export {
   PeerCatError,
   AuthenticationError,
@@ -71,4 +71,7 @@ export {
   NotFoundError,
   NetworkError,
   TimeoutError,
+  parseRateLimitHeaders,
 } from './errors';
+
+export type { RateLimitInfo } from './errors';

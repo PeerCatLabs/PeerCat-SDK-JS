@@ -25,6 +25,8 @@ import {
   PeerCatError,
   NetworkError,
   TimeoutError,
+  RateLimitError,
+  parseRateLimitHeaders,
 } from './errors';
 
 const DEFAULT_BASE_URL = 'https://api.peerc.at';
@@ -220,8 +222,12 @@ export class PeerCat {
     const headers: Record<string, string> = {
       'Authorization': `Bearer ${this.apiKey}`,
       'Content-Type': 'application/json',
-      'User-Agent': '@peercat/sdk/0.1.0',
     };
+
+    // Only set User-Agent in Node.js environments (browsers forbid this header)
+    if (typeof window === 'undefined' && typeof globalThis.navigator === 'undefined') {
+      headers['User-Agent'] = '@peercat/sdk/0.1.0';
+    }
 
     let lastError: Error | undefined;
 
@@ -239,22 +245,39 @@ export class PeerCat {
 
         clearTimeout(timeoutId);
 
-        // Parse response
-        const data = await response.json() as T | ApiErrorResponse;
+        // Parse rate limit headers (useful for both success and error cases)
+        const rateLimitInfo = parseRateLimitHeaders(response.headers);
 
-        // Check for error response
+        // Check response status first, before parsing body
         if (!response.ok) {
-          const errorResponse = data as ApiErrorResponse;
-          throw PeerCatError.fromResponse(errorResponse, response.status);
+          // Try to parse error response as JSON, with fallback for non-JSON bodies
+          let errorResponse: ApiErrorResponse;
+          try {
+            errorResponse = await response.json() as ApiErrorResponse;
+          } catch {
+            // Non-JSON error body (e.g., HTML error page)
+            errorResponse = {
+              error: {
+                type: 'api_error',
+                code: `http_${response.status}`,
+                message: `HTTP ${response.status}: ${response.statusText}`,
+              },
+            };
+          }
+          throw PeerCatError.fromResponse(errorResponse, response.status, rateLimitInfo);
         }
 
-        return data as T;
+        // Parse successful response
+        return await response.json() as T;
       } catch (error) {
         lastError = error as Error;
 
-        // Don't retry on client errors (4xx)
+        // Don't retry on client errors (4xx) except rate limits
         if (error instanceof PeerCatError && error.status >= 400 && error.status < 500) {
-          throw error;
+          // Allow retry on rate limit errors
+          if (!(error instanceof RateLimitError)) {
+            throw error;
+          }
         }
 
         // Handle timeout
@@ -269,7 +292,11 @@ export class PeerCat {
 
         // If we have more retries, wait with exponential backoff
         if (attempt < this.maxRetries) {
-          const delay = Math.min(1000 * Math.pow(2, attempt), 10000);
+          // Use retry-after header if available for rate limit errors
+          let delay = Math.min(1000 * Math.pow(2, attempt), 10000);
+          if (error instanceof RateLimitError && error.retryAfter) {
+            delay = error.retryAfter * 1000; // Convert seconds to ms
+          }
           await this.sleep(delay);
         }
       }

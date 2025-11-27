@@ -12,6 +12,20 @@ import {
 // Mock fetch
 const mockFetch = vi.fn();
 
+// Helper to create mock response with headers
+function createMockResponse(data: unknown, options: { ok?: boolean; status?: number; headers?: Record<string, string> } = {}) {
+  const { ok = true, status = 200, headers = {} } = options;
+  const mockHeaders = new Map(Object.entries(headers));
+  return {
+    ok,
+    status,
+    json: () => Promise.resolve(data),
+    headers: {
+      get: (name: string) => mockHeaders.get(name) ?? null,
+    },
+  };
+}
+
 describe('PeerCat', () => {
   beforeEach(() => {
     vi.resetAllMocks();
@@ -28,10 +42,7 @@ describe('PeerCat', () => {
     });
 
     it('should strip trailing slash from baseUrl', () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ models: [] }),
-      });
+      mockFetch.mockResolvedValueOnce(createMockResponse({ models: [] }));
 
       const client = new PeerCat({
         apiKey: 'test',
@@ -59,10 +70,7 @@ describe('PeerCat', () => {
         usage: { creditsUsed: 0.05, balanceRemaining: 9.95 },
       };
 
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve(mockResult),
-      });
+      mockFetch.mockResolvedValueOnce(createMockResponse(mockResult));
 
       const client = new PeerCat({ apiKey: 'test_key', fetch: mockFetch });
       const result = await client.generate({ prompt: 'test prompt' });
@@ -82,15 +90,11 @@ describe('PeerCat', () => {
     });
 
     it('should support demo mode', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () =>
-          Promise.resolve({
-            id: 'demo_123',
-            mode: 'demo',
-            usage: { creditsUsed: 0 },
-          }),
-      });
+      mockFetch.mockResolvedValueOnce(createMockResponse({
+        id: 'demo_123',
+        mode: 'demo',
+        usage: { creditsUsed: 0 },
+      }));
 
       const client = new PeerCat({ apiKey: 'test', fetch: mockFetch });
       const result = await client.generate({ prompt: 'test', mode: 'demo' });
@@ -107,10 +111,7 @@ describe('PeerCat', () => {
         { id: 'model-2', name: 'Model 2' },
       ];
 
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ models: mockModels }),
-      });
+      mockFetch.mockResolvedValueOnce(createMockResponse({ models: mockModels }));
 
       const client = new PeerCat({ apiKey: 'test', fetch: mockFetch });
       const models = await client.getModels();
@@ -127,10 +128,7 @@ describe('PeerCat', () => {
         models: [],
       };
 
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve(mockPrices),
-      });
+      mockFetch.mockResolvedValueOnce(createMockResponse(mockPrices));
 
       const client = new PeerCat({ apiKey: 'test', fetch: mockFetch });
       const prices = await client.getPrices();
@@ -149,10 +147,7 @@ describe('PeerCat', () => {
         totalGenerated: 800,
       };
 
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve(mockBalance),
-      });
+      mockFetch.mockResolvedValueOnce(createMockResponse(mockBalance));
 
       const client = new PeerCat({ apiKey: 'test', fetch: mockFetch });
       const balance = await client.getBalance();
@@ -163,10 +158,7 @@ describe('PeerCat', () => {
 
   describe('getHistory', () => {
     it('should include pagination params in query string', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ items: [], pagination: {} }),
-      });
+      mockFetch.mockResolvedValueOnce(createMockResponse({ items: [], pagination: {} }));
 
       const client = new PeerCat({ apiKey: 'test', fetch: mockFetch });
       await client.getHistory({ limit: 10, offset: 20 });
@@ -180,19 +172,14 @@ describe('PeerCat', () => {
 
   describe('error handling', () => {
     it('should throw AuthenticationError for 401', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: false,
-        status: 401,
-        json: () =>
-          Promise.resolve({
-            error: {
-              type: 'authentication_error',
-              code: 'invalid_api_key',
-              message: 'Invalid API key',
-              param: null,
-            },
-          }),
-      });
+      mockFetch.mockResolvedValueOnce(createMockResponse({
+        error: {
+          type: 'authentication_error',
+          code: 'invalid_api_key',
+          message: 'Invalid API key',
+          param: null,
+        },
+      }, { ok: false, status: 401 }));
 
       const client = new PeerCat({ apiKey: 'bad_key', fetch: mockFetch });
 
@@ -200,19 +187,14 @@ describe('PeerCat', () => {
     });
 
     it('should throw InsufficientCreditsError for 402', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: false,
-        status: 402,
-        json: () =>
-          Promise.resolve({
-            error: {
-              type: 'insufficient_credits',
-              code: 'insufficient_balance',
-              message: 'Insufficient credits',
-              param: null,
-            },
-          }),
-      });
+      mockFetch.mockResolvedValueOnce(createMockResponse({
+        error: {
+          type: 'insufficient_credits',
+          code: 'insufficient_balance',
+          message: 'Insufficient credits',
+          param: null,
+        },
+      }, { ok: false, status: 402 }));
 
       const client = new PeerCat({ apiKey: 'test', fetch: mockFetch });
 
@@ -222,19 +204,14 @@ describe('PeerCat', () => {
     });
 
     it('should throw InvalidRequestError for 400', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: false,
-        status: 400,
-        json: () =>
-          Promise.resolve({
-            error: {
-              type: 'invalid_request_error',
-              code: 'invalid_prompt',
-              message: 'Prompt too long',
-              param: 'prompt',
-            },
-          }),
-      });
+      mockFetch.mockResolvedValueOnce(createMockResponse({
+        error: {
+          type: 'invalid_request_error',
+          code: 'invalid_prompt',
+          message: 'Prompt too long',
+          param: 'prompt',
+        },
+      }, { ok: false, status: 400 }));
 
       const client = new PeerCat({ apiKey: 'test', fetch: mockFetch });
 
@@ -244,39 +221,63 @@ describe('PeerCat', () => {
     });
 
     it('should throw RateLimitError for 429', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: false,
-        status: 429,
-        json: () =>
-          Promise.resolve({
-            error: {
-              type: 'rate_limit_error',
-              code: 'rate_limit_exceeded',
-              message: 'Rate limit exceeded',
-              param: null,
-            },
-          }),
-      });
+      mockFetch.mockResolvedValueOnce(createMockResponse({
+        error: {
+          type: 'rate_limit_error',
+          code: 'rate_limit_exceeded',
+          message: 'Rate limit exceeded',
+          param: null,
+        },
+      }, { ok: false, status: 429 }));
 
-      const client = new PeerCat({ apiKey: 'test', fetch: mockFetch });
+      const client = new PeerCat({ apiKey: 'test', fetch: mockFetch, maxRetries: 0 });
 
       await expect(client.getBalance()).rejects.toThrow(RateLimitError);
     });
 
-    it('should not retry on 4xx errors', async () => {
-      mockFetch.mockResolvedValue({
+    it('should parse rate limit headers for RateLimitError', async () => {
+      mockFetch.mockResolvedValueOnce(createMockResponse({
+        error: {
+          type: 'rate_limit_error',
+          code: 'rate_limit_exceeded',
+          message: 'Rate limit exceeded',
+          param: null,
+        },
+      }, {
         ok: false,
-        status: 400,
-        json: () =>
-          Promise.resolve({
-            error: {
-              type: 'invalid_request_error',
-              code: 'bad_request',
-              message: 'Bad request',
-              param: null,
-            },
-          }),
-      });
+        status: 429,
+        headers: {
+          'X-RateLimit-Limit': '100',
+          'X-RateLimit-Remaining': '0',
+          'X-RateLimit-Reset': '1700000000',
+          'Retry-After': '30',
+        },
+      }));
+
+      const client = new PeerCat({ apiKey: 'test', fetch: mockFetch, maxRetries: 0 });
+
+      try {
+        await client.getBalance();
+        expect.fail('Expected RateLimitError');
+      } catch (error) {
+        expect(error).toBeInstanceOf(RateLimitError);
+        const rle = error as RateLimitError;
+        expect(rle.retryAfter).toBe(30);
+        expect(rle.rateLimitInfo?.limit).toBe(100);
+        expect(rle.rateLimitInfo?.remaining).toBe(0);
+        expect(rle.rateLimitInfo?.reset).toBe(1700000000);
+      }
+    });
+
+    it('should not retry on 4xx errors', async () => {
+      mockFetch.mockResolvedValue(createMockResponse({
+        error: {
+          type: 'invalid_request_error',
+          code: 'bad_request',
+          message: 'Bad request',
+          param: null,
+        },
+      }, { ok: false, status: 400 }));
 
       const client = new PeerCat({ apiKey: 'test', fetch: mockFetch, maxRetries: 3 });
 
@@ -286,23 +287,15 @@ describe('PeerCat', () => {
 
     it('should retry on 5xx errors', async () => {
       mockFetch
-        .mockResolvedValueOnce({
-          ok: false,
-          status: 500,
-          json: () =>
-            Promise.resolve({
-              error: {
-                type: 'server_error',
-                code: 'internal_error',
-                message: 'Internal error',
-                param: null,
-              },
-            }),
-        })
-        .mockResolvedValueOnce({
-          ok: true,
-          json: () => Promise.resolve({ credits: 10 }),
-        });
+        .mockResolvedValueOnce(createMockResponse({
+          error: {
+            type: 'server_error',
+            code: 'internal_error',
+            message: 'Internal error',
+            param: null,
+          },
+        }, { ok: false, status: 500 }))
+        .mockResolvedValueOnce(createMockResponse({ credits: 10 }));
 
       const client = new PeerCat({ apiKey: 'test', fetch: mockFetch, maxRetries: 1 });
       const balance = await client.getBalance();
@@ -314,10 +307,7 @@ describe('PeerCat', () => {
 
   describe('API keys', () => {
     it('should list keys', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ keys: [{ id: 'key_1' }] }),
-      });
+      mockFetch.mockResolvedValueOnce(createMockResponse({ keys: [{ id: 'key_1' }] }));
 
       const client = new PeerCat({ apiKey: 'test', fetch: mockFetch });
       const result = await client.listKeys();
@@ -326,10 +316,7 @@ describe('PeerCat', () => {
     });
 
     it('should revoke a key', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ success: true }),
-      });
+      mockFetch.mockResolvedValueOnce(createMockResponse({ success: true }));
 
       const client = new PeerCat({ apiKey: 'test', fetch: mockFetch });
       await client.revokeKey('key_123');
@@ -341,10 +328,7 @@ describe('PeerCat', () => {
     });
 
     it('should update key name', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ success: true }),
-      });
+      mockFetch.mockResolvedValueOnce(createMockResponse({ success: true }));
 
       const client = new PeerCat({ apiKey: 'test', fetch: mockFetch });
       await client.updateKeyName('key_123', 'New Name');
@@ -369,10 +353,7 @@ describe('PeerCat', () => {
         memo: 'PCAT:v1:sdxl:abc123',
       };
 
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve(mockSubmission),
-      });
+      mockFetch.mockResolvedValueOnce(createMockResponse(mockSubmission));
 
       const client = new PeerCat({ apiKey: 'test', fetch: mockFetch });
       const result = await client.submitPrompt({ prompt: 'test' });
@@ -381,15 +362,11 @@ describe('PeerCat', () => {
     });
 
     it('should get on-chain status', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: () =>
-          Promise.resolve({
-            txSignature: 'tx123',
-            status: 'completed',
-            imageUrl: 'https://...',
-          }),
-      });
+      mockFetch.mockResolvedValueOnce(createMockResponse({
+        txSignature: 'tx123',
+        status: 'completed',
+        imageUrl: 'https://...',
+      }));
 
       const client = new PeerCat({ apiKey: 'test', fetch: mockFetch });
       const result = await client.getOnChainStatus('tx123');
