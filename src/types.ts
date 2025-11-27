@@ -70,6 +70,8 @@ export interface PriceResponse {
   slippageTolerance: number;
   /** Timestamp of price update */
   updatedAt: string;
+  /** Treasury PDA address to send payments to */
+  treasury: string;
   /** Prices for each model */
   models: ModelPrice[];
 }

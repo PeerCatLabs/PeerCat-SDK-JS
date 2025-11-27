@@ -125,6 +125,8 @@ describe('PeerCat', () => {
       const mockPrices = {
         solPrice: 150,
         slippageTolerance: 0.02,
+        updatedAt: '2024-01-15T12:00:00Z',
+        treasury: '9JKi6Tr7JdsTJw1zNedF5vML9GpPnjHD9DWuZq1oE6nV',
         models: [],
       };
 
@@ -134,6 +136,7 @@ describe('PeerCat', () => {
       const prices = await client.getPrices();
 
       expect(prices.solPrice).toBe(150);
+      expect(prices.treasury).toBe('9JKi6Tr7JdsTJw1zNedF5vML9GpPnjHD9DWuZq1oE6nV');
     });
   });
 
